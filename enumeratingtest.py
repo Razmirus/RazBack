@@ -12,7 +12,7 @@ def backupnums(currnum):
                 break
         if currnum < pow(2,i)+1 :
             break
-    return tuple(returnval)        
+    return tuple(returnval)
    
 def main():
     num = 30
@@ -20,7 +20,7 @@ def main():
     if len(args) >= 1:
         num = int(args[0])
     vals = tuple(range(1,31))
-    print(vals)   
+    print(vals)
 
     for i in range(num):
         vals = backupnums(i+1)
