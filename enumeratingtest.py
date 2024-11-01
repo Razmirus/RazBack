@@ -19,12 +19,9 @@ def main():
     args = sys.argv[1:]
     if len(args) >= 1:
         num = int(args[0])
-    vals = tuple(range(1,31))
-    print(vals)
 
-    for i in range(num):
-        vals = backupnums(i+1)
-        print(vals)
+    vals = backupnums(num)
+    print(vals)
 
 if __name__ == "__main__":
     main()
