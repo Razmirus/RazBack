@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Script to create and manage Btrfs snapshots with automated retention
+
 # add this script to crontab using:
 # sudo crontab -e
 # for example this will run the script at 12:43 every day:
@@ -10,39 +12,71 @@
 # Initialize DEBUG variable; set to 1 to enable debug messages, 0 to disable
 DEBUG=0
 
-# Define paths for mountpoint, snapshots directory
+# Define paths for mountpoint and snapshot directories
 MOUNTPOINT="/path"
 SNAPSHOT_DIR="$MOUNTPOINT/.snapshots"
 
-# Function for debug messages to stdout
+# Debugging function to stdout
 debug_echo() {
-    if [ "$DEBUG" -eq 1 ]; then
-        echo "$1"
-    fi
+    [ "$DEBUG" -eq 1 ] && echo "$1"
 }
 
-# Function for debug messages to stderr
+# Debugging function to stderr
 debug_echo_err() {
-    if [ "$DEBUG" -eq 1 ]; then
-        echo "$1" >&2
-    fi
+    [ "$DEBUG" -eq 1 ] && echo "$1" >&2
 }
 
-# Function to display usage information
+# Show usage information
 show_help() {
     echo "Usage: $(basename "$0") [OPTIONS]"
     echo
-    echo "This script creates a read-only snapshot of a Btrfs subvolume at the specified mountpoint."
+    echo "Creates a read-only Btrfs snapshot at the specified mountpoint."
+    echo "Paths is defined as variable inside of the script."
     echo
     echo "Options:"
-    echo "  -h, --help, /?        Display this help message and exit"
+    echo "  -h, --help    Show this help message"
 }
 
-# Function to determine which snapshots to keep (backupnums)
+# Check for help option
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+# Ensure snapshot directory exists
+mkdir -p "$SNAPSHOT_DIR" || { debug_echo_err "Error: Cannot create snapshot directory."; exit 1; }
+
+# Generate snapshot name
+TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
+
+# Find the largest NEXT_COUNTER value in the snapshot directory
+NEXT_COUNTER=$(ls -d "$SNAPSHOT_DIR"/[0-9]* 2>/dev/null | awk -F/ '{print $NF}' | sed -E 's/^([0-9]{6}).*/\1/' | sort -n | tail -n 1 | sed 's/^0*//')
+
+# If no snapshot exists, set the NEXT_COUNTER to 1 (or any other starting value)
+if [ -z "$NEXT_COUNTER" ]; then
+    NEXT_COUNTER=0
+else
+    NEXT_COUNTER=$((NEXT_COUNTER + 1))  # Increment the counter for the next snapshot
+fi
+
+# Format the next counter as a six-digit number
+NEXT_COUNTER=$(printf "%06d" "$NEXT_COUNTER")
+
+# Construct the snapshot name
+SNAPSHOT_NAME="${NEXT_COUNTER}-${TIMESTAMP}"
+
+# Create snapshot
+if ! btrfs subvolume snapshot -r "$MOUNTPOINT" "${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"; then
+    debug_echo_err "Error: Failed to create snapshot $SNAPSHOT_NAME."
+    exit 1
+fi
+
+debug_echo "Snapshot created: ${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"
+
+# Determine which snapshots to retain
 backupnums() {
     local currnum=$1
     local returnval=()
-
     for (( i=0; i<10; i++ )); do
         # Ensure currnum is divisible by 2^i
         while (( currnum % (2 ** i) != 0 )); do
@@ -68,48 +102,11 @@ backupnums() {
     echo "${returnval[@]}"
 }
 
-# Check for help options
-if [[ "$1" == "-h" || "$1" == "--help" || "$1" == "/?" ]]; then
-    show_help
-    exit 0
-fi
-
-# Create snapshot directory if it doesn't exist
-mkdir -p "$SNAPSHOT_DIR" || { debug_echo_err "Error: Unable to create snapshot directory."; exit 1; }
-
-# Generate the timestamp for the snapshot name
-TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
-
-# Find the largest NEXT_COUNTER value in the snapshot directory
-NEXT_COUNTER=$(ls -d "$SNAPSHOT_DIR"/[0-9]* 2>/dev/null | awk -F/ '{print $NF}' | sed -E 's/^([0-9]{6}).*/\1/' | sort -n | tail -n 1 | sed 's/^0*//')
-
-# If no snapshot exists, set the NEXT_COUNTER to 1 (or any other starting value)
-if [ -z "$NEXT_COUNTER" ]; then
-    NEXT_COUNTER=1
-else
-    NEXT_COUNTER=$((NEXT_COUNTER + 1))  # Increment the counter for the next snapshot
-fi
-
 # Get the list of sequence numbers to keep from the backupnums function
 SEQUENCE_TO_KEEP=$(backupnums "$NEXT_COUNTER")
-debug_echo "Backups to keep - backupnums "$NEXT_COUNTER": ${SEQUENCE_TO_KEEP}"
+debug_echo "Snapshots to keep: ${SEQUENCE_TO_KEEP}"
 
-# Format the next counter as a six-digit number
-NEXT_COUNTER=$(printf "%06d" "$NEXT_COUNTER")
-
-# Construct the snapshot name
-SNAPSHOT_NAME="${NEXT_COUNTER}-${TIMESTAMP}"
-
-# Create a snapshot with a name containing the date and time and the counter
-if ! btrfs subvolume snapshot -r "$MOUNTPOINT" "${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"; then
-    debug_echo_err "Error: Unable to create snapshot $SNAPSHOT_NAME."
-    exit 1
-fi
-
-# Output result message if DEBUG=1
-debug_echo "Snapshot created: ${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"
-
-# Delete snapshots that don't match the sequence numbers from backupnums
+# Delete outdated snapshots
 find "$SNAPSHOT_DIR" -maxdepth 1 -type d -name "??????-????-??-??-??-??-??" | while read -r old_snapshot; do
     # Extract the snapshot number from the name
     SNAPSHOT_NUMBER=$(basename "$old_snapshot" | sed -E 's/^([0-9]{6}).*/\1/')
