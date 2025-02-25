@@ -48,7 +48,9 @@ All other snapshots outside this pattern are removed automatically.
 ### Snapshot Deletion (razback-remove-all.sh)
 The `razback-remove-all.sh` script removes **all** snapshots. It is only meant for emergency cleanups when disk space is critically low and is **not meant** for regular use.
 Individual snapshots can be removed by executing:
+```sh
 sudo btrfs subvolume delete "/path/.snapshots/XXXXXX-YYYY-MM-DD-HH-MM-SS"
+```
 
 ---
 
