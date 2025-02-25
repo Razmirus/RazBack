@@ -4,10 +4,8 @@
 
 # add this script to crontab using:
 # sudo crontab -e
-# for example this will run the script at 12:43 every day:
-# 43    12  *   *   *   /path/.snapshots/makesnap.sh
-# or every hour:
-# 0     *   *   *   *   /path/.snapshots/makesnap.sh
+# for example this will run the script every hour:
+# 0   *   *   *   *   /path/.snapshots/razback-snap.sh
 
 # Initialize DEBUG variable; set to 1 to enable debug messages, 0 to disable
 DEBUG=0
