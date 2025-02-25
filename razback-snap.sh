@@ -54,24 +54,10 @@ NEXT_COUNTER=$(ls -d "$SNAPSHOT_DIR"/[0-9]* 2>/dev/null | awk -F/ '{print $NF}' 
 
 # If no snapshot exists, set the NEXT_COUNTER to 1 (or any other starting value)
 if [ -z "$NEXT_COUNTER" ]; then
-    NEXT_COUNTER=0
+    NEXT_COUNTER=1
 else
     NEXT_COUNTER=$((NEXT_COUNTER + 1))  # Increment the counter for the next snapshot
 fi
-
-# Format the next counter as a six-digit number
-NEXT_COUNTER=$(printf "%06d" "$NEXT_COUNTER")
-
-# Construct the snapshot name
-SNAPSHOT_NAME="${NEXT_COUNTER}-${TIMESTAMP}"
-
-# Create snapshot
-if ! btrfs subvolume snapshot -r "$MOUNTPOINT" "${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"; then
-    debug_echo_err "Error: Failed to create snapshot $SNAPSHOT_NAME."
-    exit 1
-fi
-
-debug_echo "Snapshot created: ${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"
 
 # Determine which snapshots to retain
 backupnums() {
@@ -102,9 +88,23 @@ backupnums() {
     echo "${returnval[@]}"
 }
 
-# Get the list of sequence numbers to keep from the backupnums function
+# Get the list of sequence numbers to keep from the backupnums function, needs to run before reformating $NEXT_COUNTER
 SEQUENCE_TO_KEEP=$(backupnums "$NEXT_COUNTER")
 debug_echo "Snapshots to keep: ${SEQUENCE_TO_KEEP}"
+
+# Format the next counter as a six-digit number
+NEXT_COUNTER=$(printf "%06d" "$NEXT_COUNTER")
+
+# Construct the snapshot name
+SNAPSHOT_NAME="${NEXT_COUNTER}-${TIMESTAMP}"
+
+# Create snapshot
+if ! btrfs subvolume snapshot -r "$MOUNTPOINT" "${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"; then
+    debug_echo_err "Error: Failed to create snapshot $SNAPSHOT_NAME."
+    exit 1
+fi
+
+debug_echo "Snapshot created: ${SNAPSHOT_DIR}/${SNAPSHOT_NAME}"
 
 # Delete outdated snapshots
 find "$SNAPSHOT_DIR" -maxdepth 1 -type d -name "??????-????-??-??-??-??-??" | while read -r old_snapshot; do
